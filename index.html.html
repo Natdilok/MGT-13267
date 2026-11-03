@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPU Assist - ระบบแจ้งปัญหาภายในมหาวิทยาลัย</title>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Kanit', sans-serif; }
+        body { background-color: #e4e7eb; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .app-container { width: 390px; height: 844px; background-color: #f8fafe; border-radius: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); position: relative; overflow: hidden; display: flex; flex-direction: column; border: 8px solid #333; }
+        .screen { display: none; flex-direction: column; height: 100%; width: 100%; background: #f8fafe; padding-bottom: 80px; overflow-y: auto; }
+        .screen.active { display: flex; }
+        
+        /* Headers */
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; background-color: #fff; position: sticky; top: 0; z-index: 10;}
+        .page-header { display: flex; align-items: center; gap: 15px; padding: 20px; background: #fff; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.02);}
+        .back-btn { font-size: 24px; cursor: pointer; color: #E51A7A; /* SPU Pink */ }
+        
+        /* Common Utils */
+        .content { padding: 15px 20px; }
+        .card { background: #fff; border-radius: 16px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); margin-bottom: 15px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .btn-primary { background: #1a2b4c; color: white; border: none; padding: 12px; border-radius: 12px; width: 100%; font-size: 16px; cursor: pointer; }
+        
+        /* Bottom Nav */
+        .bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; background: #fff; display: flex; justify-content: space-between; padding: 10px 25px 20px; border-top: 1px solid #edf2f7; z-index: 20; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; color: #a0aec0; font-size: 10px; cursor: pointer; }
+        .nav-item.active { color: #E51A7A; }
+        .nav-item i { font-size: 22px; font-style: normal; margin-bottom: 2px;}
+
+        /* --- Specific Screens --- */
+        /* Home */
+        .greeting-card { background: linear-gradient(135deg, #ffe0f0 0%, #f0f5ff 100%); border-radius: 20px; padding: 20px; }
+        .status-card { text-align: center; cursor: pointer;}
+        .menu-item { text-align: center; cursor: pointer; }
+        .menu-item .icon { width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 12px; display: flex; justify-content: center; align-items: center; font-size: 24px; }
+        
+        /* Chat */
+        .chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: #f8fafe; }
+        .msg { max-width: 80%; padding: 10px 15px; border-radius: 16px; font-size: 14px; }
+        .msg.bot { background: #ffe0f0; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .msg.user { background: #1a2b4c; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .chat-input { display: flex; padding: 15px; background: #fff; position: absolute; bottom: 0; width: 100%; border-top: 1px solid #eee; z-index: 30;}
+        .chat-input input { flex: 1; border: 1px solid #ccc; padding: 10px; border-radius: 20px; outline: none; }
+        .chat-input button { background: #1a2b4c; color: white; border: none; width: 40px; height: 40px; border-radius: 50%; margin-left: 10px; cursor: pointer;}
+        
+        /* Form & Tracking */
+        .cat-item { border: 2px solid transparent; border-radius: 12px; padding: 15px 10px; text-align: center; cursor: pointer; }
+        .cat-item.selected { border-color: #E51A7A; background: #fff5f9; }
+        .timeline { padding-left: 20px; border-left: 2px solid #E51A7A; margin-top: 20px; }
+        .tl-item { position: relative; margin-bottom: 20px; padding-left: 15px; }
+        .tl-item::before { content: ''; position: absolute; left: -24px; top: 0; width: 10px; height: 10px; background: #E51A7A; border-radius: 50%; border: 3px solid #fff; }
+        
+        /* Tool Card */
+        .tool-card { display: flex; flex-direction: column; align-items: center; text-align: center; cursor: pointer; }
+        .list-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; }
+
+        /* Notification Toast */
+        .toast { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.95); padding: 15px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 100; width: 90%; display: none; backdrop-filter: blur(5px); }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    
+    <!-- TOAST NOTIFICATION -->
+    <div class="toast" id="push-notif">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <div style="background:#E51A7A; color:white; padding:5px; border-radius:8px;">🏫</div>
+            <div>
+                <h4 style="font-size:14px; margin:0;">SPU Assist</h4>
+                <p style="font-size:12px; color:#555; margin:0;">ปัญหาแอร์ห้อง 11-201 ได้รับการแก้ไขแล้ว</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. HOME SCREEN -->
+    <div class="screen active" id="screen-home">
+        <div class="header">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="font-size:24px; color:#E51A7A;">🏫</div>
+                <div style="font-weight:600;">SPU <span style="color:#E51A7A;">Assist</span></div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <div onclick="showToast()" style="cursor:pointer; background:#eee; padding:5px 10px; border-radius:50%;">🔔</div>
+                <div onclick="nav('screen-profile')" style="cursor:pointer; background:#eee; padding:5px 10px; border-radius:50%;">👤</div>
+            </div>
+        </div>
+        <div class="content">
+            <div class="greeting-card">
+                <h1 style="font-size:22px; color:#1a2b4c;">สวัสดีชาว SPU!</h1>
+                <p style="font-size:14px; color:#4a5568;">วันนี้มีอะไรให้มหาลัยช่วยเหลือบ้าง?</p>
+                <input type="text" placeholder="ค้นหา เช่น 'แอร์ไม่เย็น', 'ตารางเรียน'" style="width:100%; padding:10px; border-radius:10px; border:none; margin-top:10px; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
+            </div>
+            <div class="grid-3" style="margin-top:15px;">
+                <div class="card status-card">
+                    <div style="color:#10b981; font-size:20px;">🎓</div>
+                    <div style="font-size:11px; color:#666;">สถานะทะเบียน</div>
+                    <div style="color:#10b981; font-size:12px; font-weight:bold;">ปกติ</div>
+                </div>
+                <div class="card status-card" onclick="nav('screen-report')">
+                    <div style="color:#f59e0b; font-size:20px;">🔧</div>
+                    <div style="font-size:11px; color:#666;">แจ้งซ่อมอาคาร</div>
+                    <div style="color:#f59e0b; font-size:12px; font-weight:bold;">บริการ 24 ชม.</div>
+                </div>
+                <div class="card status-card" onclick="nav('screen-tracking')">
+                    <div style="color:#ef4444; font-size:20px;">📋</div>
+                    <div style="font-size:11px; color:#666;">ติดตามปัญหา</div>
+                    <div style="color:#ef4444; font-size:12px; font-weight:bold;" id="issue-count">0 เรื่อง</div>
+                </div>
+            </div>
+            <div class="grid-2" style="margin-top:10px;">
+                <div class="card menu-item" onclick="nav('screen-report')">
+                    <div class="icon" style="background:#fee2e2; color:#ef4444;">🚨</div>
+                    <h4 style="font-size:13px;">แจ้งปัญหา/ร้องเรียน</h4>
+                    <p style="font-size:10px; color:#666;">แอร์, ห้องน้ำ, IT, อื่นๆ</p>
+                </div>
+                <div class="card menu-item" onclick="nav('screen-chat')">
+                    <div class="icon" style="background:#ffe0f0; color:#E51A7A;">🤖</div>
+                    <h4 style="font-size:13px;">AI SPU Bot</h4>
+                    <p style="font-size:10px; color:#666;">สอบถามข้อมูลทั่วไป</p>
+                </div>
+                <div class="card menu-item" onclick="nav('screen-manual')">
+                    <div class="icon" style="background:#f3e8ff; color:#9333ea;">📖</div>
+                    <h4 style="font-size:13px;">คู่มือนักศึกษา</h4>
+                    <p style="font-size:10px; color:#666;">เอกสาร, กฎระเบียบ</p>
+                </div>
+                <div class="card menu-item" onclick="nav('screen-tools')">
+                    <div class="icon" style="background:#e0ebff; color:#3b82f6;">🌐</div>
+                    <h4 style="font-size:13px;">บริการระบบ SPU</h4>
+                    <p style="font-size:10px; color:#666;">SCMS, e-Learning</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. AI CHAT -->
+    <div class="screen" id="screen-chat" style="padding-bottom: 0;">
+        <div class="page-header">
+            <div class="back-btn" onclick="nav('screen-home')">←</div>
+            <div style="font-size:18px; font-weight:600;">AI SPU Bot</div>
+        </div>
+        <div class="chat-box" id="chat-history">
+            <div class="msg bot">สวัสดีค่ะ! บอทศรีปทุมยินดีให้บริการค่ะ 😊<br><br>สอบถามข้อมูลเรื่องอะไรดีคะ?<br>- วันหยุดมหาลัย<br>- การติดต่อแผนกทะเบียน<br>- การขอใบเกรด<br>- เบอร์โทรฉุกเฉิน</div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="chat-input-field" placeholder="พิมพ์ข้อความ...">
+            <button onclick="sendChat()">➤</button>
+        </div>
+    </div>
+
+    <!-- 3. MANUALS (คู่มือนักศึกษา) -->
+    <div class="screen" id="screen-manual">
+        <div class="page-header">
+            <div class="back-btn" onclick="nav('screen-home')">←</div>
+            <div style="font-size:18px; font-weight:600;">คู่มือนักศึกษา</div>
+        </div>
+        <div class="content">
+            <div class="card list-item" onclick="alert('แสดงคู่มือการลงทะเบียน')">
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <div style="font-size:24px; color:#3b82f6;">📝</div>
+                    <div>
+                        <h4 style="font-size:14px; margin:0;">ขั้นตอนการลงทะเบียนเรียน</h4>
+                        <small style="color:#666;">(ผ่านระบบ SCMS)</small>
+                    </div>
+                </div>
+                <div style="color:#ccc;">></div>
+            </div>
+            <div class="card list-item">
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <div style="font-size:24px; color:#10b981;">📄</div>
+                    <div><h4 style="font-size:14px; margin:0;">การขอเอกสารทางการศึกษา (Transcript)</h4></div>
+                </div>
+                <div style="color:#ccc;">></div>
+            </div>
+            <div class="card list-item">
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <div style="font-size:24px; color:#f59e0b;">🚗</div>
+                    <div><h4 style="font-size:14px; margin:0;">ระเบียบการจอดรถสำหรับนักศึกษา</h4></div>
+                </div>
+                <div style="color:#ccc;">></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. STUDY TOOLS (ระบบ SPU) -->
+    <div class="screen" id="screen-tools">
+        <div class="page-header">
+            <div class="back-btn" onclick="nav('screen-home')">←</div>
+            <div style="font-size:18px; font-weight:600;">บริการระบบ SPU</div>
+        </div>
+        <div class="content">
+            <div class="grid-2">
+                <div class="card tool-card" onclick="window.open('https://scms.spu.ac.cl')">
+                    <div style="width:50px; height:50px; background:#1a2b4c; border-radius:12px; margin-bottom:10px; display:flex; justify-content:center; align-items:center; color:white; font-size:24px;">📝</div>
+                    <b>SCMS</b><small style="color:#666;">ระบบทะเบียน</small>
+                </div>
+                <div class="card tool-card" onclick="window.open('https://lms.spu.ac.th')">
+                    <div style="width:50px; height:50px; background:#E51A7A; border-radius:12px; margin-bottom:10px; display:flex; justify-content:center; align-items:center; color:white; font-size:24px;">📚</div>
+                    <b>e-Learning</b><small style="color:#666;">บทเรียนออนไลน์</small>
+                </div>
+                <div class="card tool-card" onclick="window.open('https://mail.spu.ac.th')">
+                    <div style="width:50px; height:50px; background:#4285f4; border-radius:12px; margin-bottom:10px; display:flex; justify-content:center; align-items:center; color:white; font-size:24px;">📧</div>
+                    <b>SPU Mail</b><small style="color:#666;">อีเมลนักศึกษา</small>
+                </div>
+                <div class="card tool-card" onclick="window.open('https://www.spu.ac.th')">
+                    <div style="width:50px; height:50px; background:#10b981; border-radius:12px; margin-bottom:10px; display:flex; justify-content:center; align-items:center; color:white; font-size:24px;">🌐</div>
+                    <b>SPU Website</b><small style="color:#666;">เว็บไซต์หลัก</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. REPORT ISSUE (อัปเดตหมวดหมู่) -->
+    <div class="screen" id="screen-report">
+        <div class="page-header">
+            <div class="back-btn" onclick="nav('screen-home')">←</div>
+            <div style="font-size:18px; font-weight:600;">แจ้งปัญหา/ร้องเรียน</div>
+        </div>
+        <div class="content">
+            <label style="font-size:14px; font-weight:bold; margin-bottom:10px; display:block;">เลือกประเภทปัญหาที่ต้องการแจ้ง</label>
+            <div class="grid-2" id="cat-selection">
+                <div class="card cat-item selected" onclick="selCat(this, 'อาคารสถานที่/ซ่อมบำรุง')">
+                    <div style="font-size:24px;">🔧</div>
+                    <small><b>อาคาร/ซ่อมบำรุง</b><br><span style="font-size:10px;color:#666;">แอร์, ไฟดับ, ห้องน้ำ, ลิฟต์</span></small>
+                </div>
+                <div class="card cat-item" onclick="selCat(this, 'ระบบ IT/เครือข่าย')">
+                    <div style="font-size:24px;">💻</div>
+                    <small><b>ระบบ IT/เครือข่าย</b><br><span style="font-size:10px;color:#666;">Wi-Fi, ล็อกอิน, SCMS</span></small>
+                </div>
+                <div class="card cat-item" onclick="selCat(this, 'งานทะเบียน/วิชาการ')">
+                    <div style="font-size:24px;">📝</div>
+                    <small><b>งานทะเบียน/วิชาการ</b><br><span style="font-size:10px;color:#666;">ลงทะเบียน, เอกสาร</span></small>
+                </div>
+                <div class="card cat-item" onclick="selCat(this, 'ความปลอดภัย/รปภ.')">
+                    <div style="font-size:24px;">👮</div>
+                    <small><b>ความปลอดภัย/รปภ.</b><br><span style="font-size:10px;color:#666;">ของหาย, จอดรถ, อุบัติเหตุ</span></small>
+                </div>
+            </div>
+            
+            <div style="margin-top: 15px;">
+                <label style="font-size:14px; font-weight:bold; margin-bottom:5px; display:block;">สถานที่ / อาคาร / ห้อง (ถ้ามี)</label>
+                <input type="text" id="report-location" placeholder="เช่น อาคาร 11 ชั้น 2 ห้อง 201" style="width:100%; padding:12px; border-radius:12px; border:1px solid #ccc; margin-bottom:15px; outline:none;">
+            </div>
+
+            <label style="font-size:14px; font-weight:bold; margin-bottom:5px; display:block;">รายละเอียดปัญหา</label>
+            <textarea id="report-detail" style="width:100%; height:80px; padding:12px; border-radius:12px; border:1px solid #ccc; margin-bottom:20px; outline:none;" placeholder="ระบุรายละเอียดเพิ่มเติม..."></textarea>
+            
+            <button class="btn-primary" onclick="submitIssue()">ส่งเรื่องแจ้งปัญหา</button>
+        </div>
+    </div>
+
+    <!-- 6. TRACKING STATUS -->
+    <div class="screen" id="screen-tracking">
+        <div class="page-header">
+            <div class="back-btn" onclick="nav('screen-home')">←</div>
+            <div style="font-size:18px; font-weight:600;">ติดตามการดำเนินการ</div>
+        </div>
+        <div class="content" id="tracking-list">
+            <!-- Data will be injected here via JS -->
+        </div>
+    </div>
+
+    <!-- 7. PROFILE -->
+    <div class="screen" id="screen-profile">
+        <div class="page-header">
+            <div class="back-btn" onclick="nav('screen-home')">←</div>
+            <div style="font-size:18px; font-weight:600;">โปรไฟล์นักศึกษา</div>
+        </div>
+        <div class="content">
+            <div class="card" style="display:flex; align-items:center; gap:15px; background: linear-gradient(135deg, #1a2b4c 0%, #3b82f6 100%); color:white;">
+                <div style="width:60px; height:60px; background:rgba(255,255,255,0.2); border-radius:50%; display:flex; justify-content:center; align-items:center; font-size:30px;">👤</div>
+                <div>
+                    <h3 style="margin:0;">นนท์ รัตนโชติ</h3>
+                    <p style="font-size:12px; margin:0; opacity:0.8;">รหัสนักศึกษา: 66xxxxxxx</p>
+                    <span style="background:#E51A7A; color:white; padding:2px 8px; border-radius:10px; font-size:10px; margin-top:5px; display:inline-block;">คณะเทคโนโลยีสารสนเทศ</span>
+                </div>
+            </div>
+            <div class="card list-item" onclick="alert('ข้อมูลส่วนตัว')"><b>👤 ข้อมูลส่วนตัว</b> <span>></span></div>
+            <div class="card list-item" onclick="nav('screen-tracking')"><b>📋 ประวัติการแจ้งปัญหาทั้งหมด</b> <span>></span></div>
+            <div class="card list-item" onclick="showToast()"><b>🔔 ทดสอบแจ้งเตือน (Push)</b> <span>></span></div>
+            <div class="card list-item" onclick="clearData()" style="color:red;"><b>🗑️ รีเซ็ตข้อมูลทดสอบ</b></div>
+        </div>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="nav('screen-home', this)"><i>🏠</i><span>หน้าแรก</span></div>
+        <div class="nav-item" onclick="nav('screen-report', this)"><i>🚨</i><span>แจ้งเรื่อง</span></div>
+        <div class="nav-item" onclick="nav('screen-manual', this)"><i>📖</i><span>คู่มือ</span></div>
+        <div class="nav-item" onclick="nav('screen-tools', this)"><i>🌐</i><span>ระบบ SPU</span></div>
+        <div class="nav-item" onclick="nav('screen-profile', this)"><i>👤</i><span>ฉัน</span></div>
+    </div>
+</div>
+
+<script>
+    // --- Navigation System ---
+    function nav(screenId, navElement = null) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+        
+        if(navElement) {
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            navElement.classList.add('active');
+        } else {
+            // Update active state based on screen if navigated from buttons
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            if(screenId === 'screen-home') document.querySelectorAll('.nav-item')[0].classList.add('active');
+            if(screenId === 'screen-report') document.querySelectorAll('.nav-item')[1].classList.add('active');
+            if(screenId === 'screen-manual') document.querySelectorAll('.nav-item')[2].classList.add('active');
+            if(screenId === 'screen-tools') document.querySelectorAll('.nav-item')[3].classList.add('active');
+            if(screenId === 'screen-profile') document.querySelectorAll('.nav-item')[4].classList.add('active');
+        }
+        if(screenId === 'screen-tracking') renderTracking();
+        if(screenId === 'screen-home') updateHomeBadge();
+    }
+
+    // --- Report Issue System (LocalStorage) ---
+    let selectedCat = 'อาคารสถานที่/ซ่อมบำรุง';
+    function selCat(el, cat) {
+        document.querySelectorAll('.cat-item').forEach(c => c.classList.remove('selected'));
+        el.classList.add('selected');
+        selectedCat = cat;
+    }
+
+    function submitIssue() {
+        const detail = document.getElementById('report-detail').value;
+        const location = document.getElementById('report-location').value;
+        const issues = JSON.parse(localStorage.getItem('spu_issues')) || [];
+        
+        const newIssue = {
+            id: 'SPU-' + Math.floor(1000000 + Math.random() * 9000000),
+            cat: selectedCat,
+            location: location || 'ไม่ระบุสถานที่',
+            detail: detail || 'ไม่มีรายละเอียดเพิ่มเติม',
+            date: new Date().toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }),
+            status: 'รับเรื่องแล้ว'
+        };
+        issues.unshift(newIssue);
+        localStorage.setItem('spu_issues', JSON.stringify(issues));
+        
+        document.getElementById('report-detail').value = '';
+        document.getElementById('report-location').value = '';
+        alert('ส่งเรื่องให้หน่วยงานที่เกี่ยวข้องเรียบร้อยแล้ว\nหมายเลขติดตาม: ' + newIssue.id);
+        nav('screen-tracking');
+    }
+
+    function renderTracking() {
+        const list = document.getElementById('tracking-list');
+        const issues = JSON.parse(localStorage.getItem('spu_issues')) || [];
+        
+        if (issues.length === 0) {
+            list.innerHTML = '<div class="card" style="text-align:center; color:#888; padding:30px;">ยังไม่มีประวัติการแจ้งปัญหา</div>';
+            return;
+        }
+
+        list.innerHTML = issues.map(iss => `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <b style="font-size:16px; color:#1a2b4c;">${iss.id}</b>
+                    <span style="background:#fff5f9; color:#E51A7A; padding:4px 10px; border-radius:12px; font-size:11px; border: 1px solid #E51A7A;">รับเรื่องแล้ว</span>
+                </div>
+                <div style="font-size:14px; font-weight:600; color:#333;">${iss.cat}</div>
+                <div style="font-size:12px; color:#666;">📍 สถานที่: ${iss.location}</div>
+                <div style="font-size:12px; color:#666; margin-bottom:15px;">🕒 วันที่แจ้ง: ${iss.date}</div>
+                <div class="timeline">
+                    <div class="tl-item"><small style="color:#666;">รับเรื่องเข้าระบบ</small><br><b>${iss.date}</b></div>
+                    <div class="tl-item" style="opacity:0.4;"><small style="color:#666;">รอดำเนินการแก้ไข</small><br><b>-</b></div>
+                </div>
+                <div style="background:#f8fafe; padding:10px; border-radius:8px; font-size:12px; margin-top:10px;">
+                    <b>รายละเอียด:</b> ${iss.detail}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function updateHomeBadge() {
+        const issues = JSON.parse(localStorage.getItem('spu_issues')) || [];
+        const badge = document.getElementById('issue-count');
+        badge.innerText = issues.length + ' เรื่อง';
+        badge.style.color = issues.length > 0 ? '#ef4444' : '#666';
+    }
+
+    function clearData() {
+        if(confirm('ยืนยันการลบประวัติการแจ้งปัญหาทั้งหมด?')) {
+            localStorage.removeItem('spu_issues');
+            updateHomeBadge();
+            nav('screen-home');
+        }
+    }
+
+    // --- AI Chatbot Simulation ---
+    function sendChat() {
+        const input = document.getElementById('chat-input-field');
+        const text = input.value.trim();
+        if(!text) return;
+        
+        const chatBox = document.getElementById('chat-history');
+        chatBox.innerHTML += `<div class="msg user">${text}</div>`;
+        input.value = '';
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        setTimeout(() => {
+            let reply = "ขออภัยค่ะ บอทยังไม่เข้าใจคำถาม หากต้องการแจ้งปัญหา/ซ่อมบำรุง สามารถกดที่เมนู 'แจ้งเรื่อง' ด้านล่างได้เลยค่ะ";
+            if(text.toLowerCase().includes('แอร์') || text.includes('น้ำ') || text.includes('ไฟ')) {
+                reply = "เรื่องอาคารสถานที่ สามารถแจ้งผ่านเมนู 'แจ้งเรื่อง' > เลือก 'อาคาร/ซ่อมบำรุง' ได้เลยค่ะ ช่างจะรีบเข้าไปดูแลให้นะคะ 🔧";
+            } else if (text.includes('ทะเบียน') || text.includes('เกรด') || text.includes('ลงทะเบียน')) {
+                reply = "สำหรับการลงทะเบียน หรือขอเอกสาร สามารถทำผ่านระบบ SCMS ได้เลยค่ะ (มีลิงก์ที่เมนู 'ระบบ SPU') หรือติดต่อสำนักงานทะเบียน อาคาร 11 ชั้น 2 ค่ะ";
+            } else if (text.includes('ของหาย')) {
+                reply = "หากมีของหายในมหาลัย แนะนำให้ติดต่อป้อม รปภ. อาคาร 11 หรือแจ้งเรื่องทิ้งไว้ในระบบหมวด 'ความปลอดภัย/รปภ.' ค่ะ";
+            }
+            chatBox.innerHTML += `<div class="msg bot">${reply}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }, 1000);
+    }
+
+    // --- Push Notification Toast Simulation ---
+    function showToast() {
+        const toast = document.getElementById('push-notif');
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 4000);
+    }
+
+    // Initialize
+    window.onload = updateHomeBadge;
+</script>
+</body>
+</html>
